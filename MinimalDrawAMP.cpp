@@ -4,15 +4,16 @@
 #include <d3dcommon.h>
 #include <d3d11.h>
 #include <atlcomcli.h>
+#include "DirectXTK/WICTextureLoader.h"
 
 #pragma comment(lib, "dxguid.lib")
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 
 int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
-                     _In_opt_ HINSTANCE hPrevInstance,
-                     _In_ LPTSTR    lpCmdLine,
-                     _In_ int       nCmdShow)
+	_In_opt_ HINSTANCE hPrevInstance,
+	_In_ LPTSTR    lpCmdLine,
+	_In_ int       nCmdShow)
 {
 	WNDCLASSEX wcex = { sizeof(wcex) };
 	wcex.lpfnWndProc = DefWindowProc;
@@ -42,9 +43,9 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_UNORDERED_ACCESS;// | DXGI_USAGE_SHADER_INPUT;
 
 	D3D11CreateDeviceAndSwapChain(
-		0, D3D_DRIVER_TYPE_HARDWARE, 
-		0, 0&D3D11_CREATE_DEVICE_DEBUG, 
-		0, 0, D3D11_SDK_VERSION, 
+		0, D3D_DRIVER_TYPE_HARDWARE,
+		0, 0 & D3D11_CREATE_DEVICE_DEBUG,
+		0, 0, D3D11_SDK_VERSION,
 		&desc, &swapchain, &dev, 0, &ctx);
 
 	if (!swapchain) return 1;
@@ -56,9 +57,16 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	using namespace concurrency::graphics;
 	using namespace concurrency::graphics::direct3d;
 
-	auto tex = make_texture< unorm4, 2>(create_accelerator_view(dev), backbuffer);
+	auto tex = make_texture<unorm4, 2>(create_accelerator_view(dev), backbuffer);
 	texture_view<unorm4, 2> tv(tex);
 	const auto ext = tv.extent;
+
+	CComPtr<ID3D11Texture2D> image;
+	CComPtr<ID3D11ShaderResourceView> image_view;
+	if ((CreateWICTextureFromFile(dev, ctx, L"Bruce", reinterpret_cast<ID3D11Resource**>(&image), &image_view)))
+		return 1;
+
+	auto image_texture = make_texture<unorm4, 2>(create_accelerator_view(dev), image);
 
 	MSG msg;
 	while (::IsWindow(hWnd))
@@ -67,11 +75,15 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		{
 			const float t = (msg.time%1000)*0.001f;
 			concurrency::parallel_for_each(
-				tv.accelerator_view, ext, 
-				[=](concurrency::index<2> idx) restrict(amp)
+				tv.accelerator_view, ext, [=, &image_texture](concurrency::index<2> idx) restrict(amp)
 			{
-				unorm4 val(1.f*idx[1]/ext[1], 1.f*idx[0]/ext[0], t, 1);
-				tv.set(idx, val);
+				// r += img[idx + index<2>(dy, dx)];
+				if (idx[0] < ext[0] && idx[1] < ext[1])
+				{
+					unorm4 val(1.f*idx[1] / ext[1], 1.f*idx[0] / ext[0], t, 1);
+					image_texture[concurrency::index<2>(0, 0)];
+					tv.set(idx, val);
+				}
 			});
 
 			swapchain->Present(1, 0);
