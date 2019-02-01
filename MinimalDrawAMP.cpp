@@ -1,10 +1,13 @@
 #include <amp.h>
 #include <amp_graphics.h>
 
+#include <d3dcommon.h>
 #include <d3d11.h>
 #include <atlcomcli.h>
 
-#pragma comment(lib, "d3d11")
+#pragma comment(lib, "dxguid.lib")
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "dxgi.lib")
 
 int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
