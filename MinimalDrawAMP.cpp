@@ -40,50 +40,83 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	desc.OutputWindow = hWnd;
 	desc.Windowed = TRUE;
-	desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_UNORDERED_ACCESS;// | DXGI_USAGE_SHADER_INPUT;
+	desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_UNORDERED_ACCESS | DXGI_USAGE_SHADER_INPUT;;
+
+    D3D_FEATURE_LEVEL FeatureLevel = D3D_FEATURE_LEVEL_11_0;
 
 	D3D11CreateDeviceAndSwapChain(
 		0, D3D_DRIVER_TYPE_HARDWARE,
-		0, 0 & D3D11_CREATE_DEVICE_DEBUG,
-		0, 0, D3D11_SDK_VERSION,
+		0, D3D11_CREATE_DEVICE_DEBUG,
+		&FeatureLevel, 1, D3D11_SDK_VERSION,
 		&desc, &swapchain, &dev, 0, &ctx);
 
 	if (!swapchain) return 1;
-
-	CComPtr<ID3D11Texture2D> backbuffer;
-	swapchain->GetBuffer(0, IID_PPV_ARGS(&backbuffer));
 
 	using namespace concurrency::direct3d;
 	using namespace concurrency::graphics;
 	using namespace concurrency::graphics::direct3d;
 
-	auto tex = make_texture<unorm4, 2>(create_accelerator_view(dev), backbuffer);
+    auto av = create_accelerator_view(dev);
+
+	CComPtr<ID3D11Texture2D> image;
+	CComPtr<ID3D11ShaderResourceView> image_srv;
+	if (FAILED(CreateWICTextureFromFile(dev, ctx, L"Bruce", reinterpret_cast<ID3D11Resource**>(&image), &image_srv)))
+		return 1;
+
+    D3D11_TEXTURE2D_DESC input_tex_desc;
+    image->GetDesc(&input_tex_desc);
+    UINT img_width = input_tex_desc.Width;
+    UINT img_height = input_tex_desc.Height;
+
+    // create a texture the same size as image, it's used to store the effect applied texture
+    texture<unorm4, 2> processed_texture(
+        static_cast<int>(img_height), 
+        static_cast<int>(img_width),
+        8U, av);
+
+    RECT rc;
+    GetClientRect( hWnd, &rc );
+    size_t wd_width = rc.right - rc.left;
+    size_t wd_height = rc.bottom - rc.top;
+
+    DXGI_SWAP_CHAIN_DESC sd;
+    swapchain->GetDesc(&sd);
+    if (sd.BufferDesc.Width != wd_width || sd.BufferDesc.Height != wd_height) {
+        if (FAILED(swapchain->ResizeBuffers(sd.BufferCount, (UINT)wd_width, (UINT)wd_height, sd.BufferDesc.Format, 0)))
+            return false;
+    }
+
+	CComPtr<ID3D11Texture2D> backbuffer;
+	swapchain->GetBuffer(0, IID_PPV_ARGS(&backbuffer));
+
+	auto tex = make_texture<unorm4, 2>(av, backbuffer);
 	texture_view<unorm4, 2> tv(tex);
 	const auto ext = tv.extent;
 
-	CComPtr<ID3D11Texture2D> image;
-	CComPtr<ID3D11ShaderResourceView> image_view;
-	if ((CreateWICTextureFromFile(dev, ctx, L"Bruce", reinterpret_cast<ID3D11Resource**>(&image), &image_view)))
-		return 1;
-
-	auto image_texture = make_texture<unorm4, 2>(create_accelerator_view(dev), image);
+	auto image_texture = make_texture<unorm4, 2>(av, image);
+    bool bInvert = false;
 
 	MSG msg;
 	while (::IsWindow(hWnd))
-		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) DispatchMessage(&msg);
+		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            DispatchMessage(&msg);
+            switch (msg.message)
+            {
+            case WM_KEYDOWN:
+                bInvert = !bInvert;
+                break;
+            }
+        }
 		else
 		{
 			const float t = (msg.time%1000)*0.001f;
 			concurrency::parallel_for_each(
 				tv.accelerator_view, ext, [=, &image_texture](concurrency::index<2> idx) restrict(amp)
 			{
-				// r += img[idx + index<2>(dy, dx)];
-				if (idx[0] < ext[0] && idx[1] < ext[1])
-				{
-					unorm4 val(1.f*idx[1] / ext[1], 1.f*idx[0] / ext[0], t, 1);
-					image_texture[concurrency::index<2>(0, 0)];
-					tv.set(idx, val);
-				}
+                unorm4 val = image_texture[idx];
+                if (bInvert)
+                    val = unorm4(1.0) - val;
+                    tv.set(idx, val);
 			});
 
 			swapchain->Present(1, 0);
