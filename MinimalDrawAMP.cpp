@@ -60,7 +60,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 
 	CComPtr<ID3D11Texture2D> image;
 	CComPtr<ID3D11ShaderResourceView> image_srv;
-	if (FAILED(CreateWICTextureFromFile(dev, ctx, L"Bruce", reinterpret_cast<ID3D11Resource**>(&image), &image_srv)))
+	if (FAILED(CreateWICTextureFromFile(dev, ctx, L"honkai_impact.png", reinterpret_cast<ID3D11Resource**>(&image), &image_srv)))
 		return 1;
 
     D3D11_TEXTURE2D_DESC input_tex_desc;
@@ -116,9 +116,9 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
                 unorm4 val = image_texture[idx];
                 if (bInvert)
                     val = unorm4(1.0) - val;
-                    tv.set(idx, val);
+                val += unorm4(1.f*idx[1] / ext[1], 1.f*idx[0] / ext[0], t, 0);
+                tv.set(idx, val);
 			});
-
 			swapchain->Present(1, 0);
 		}
 	return 0;
